@@ -154,12 +154,19 @@
       <canvas id="resourceChart"></canvas>
     </div>
     <div class="card" style="margin-bottom:0">
-      <div class="card-title">Risk Distribution</div>
-      <div class="card-subtitle">Open issues by severity — Urgent/overdue = High, unassigned/past-due = Medium</div>
+      <div class="card-title">Risk Overview</div>
+      <div class="card-subtitle">Open issues by severity across all projects</div>
       <canvas id="riskChart"></canvas>
     </div>
   </div>
   <div style="margin-bottom:20px"></div>
+
+  <!-- Risk by project (stacked bar) -->
+  <div class="card">
+    <div class="card-title">Risk by Project</div>
+    <div class="card-subtitle">High / Medium / Low risk issues broken down by project — High = Urgent or overdue P2, Medium = unassigned P2 or overdue P3</div>
+    <canvas id="riskByProjectChart"></canvas>
+  </div>
 
   <!-- Risk items -->
   <div class="two-col">
@@ -176,6 +183,16 @@
   </div>
   <div style="margin-bottom:20px"></div>
 
+  <!-- Pilot customers -->
+  <div class="card" id="pilotSection">
+    <div class="card-title">🌱 Pilot Customer Status</div>
+    <div class="card-subtitle">Issues tagged with pilot/customer labels or in pilot projects</div>
+    <table id="pilotTable"></table>
+    <div id="pilotEmpty" style="display:none;color:#888;font-size:13px;padding:12px 0">
+      No pilot customer labels found in Linear. Tag issues with labels like "Pilot", "Customer A", etc. and re-run <code>npm run update</code>.
+    </div>
+  </div>
+
   <!-- Projects table -->
   <div class="card">
     <div class="card-title">Projects</div>
@@ -186,8 +203,9 @@
   <!-- Load balance -->
   <div class="card">
     <div class="card-title">Load Balance</div>
-    <div class="card-subtitle">Active and blocked work per team member</div>
+    <div class="card-subtitle">Work distribution per team member — sorted by most active + blocked</div>
     <table id="loadTable"></table>
+    <div id="loadEmpty" style="display:none;color:#888;font-size:13px;padding:12px 0">No assigned open issues found.</div>
   </div>
 
   <div class="fetched-at" id="fetchedAt"></div>
@@ -520,7 +538,7 @@ new Chart(document.getElementById('resourceChart'), {
   }
 });
 
-// ── Chart 3: Risk ────────────────────────────────────────────────────────────
+// ── Chart 3: Risk overview (doughnut) ────────────────────────────────────────
 new Chart(document.getElementById('riskChart'), {
   type: 'doughnut',
   data: {
@@ -531,7 +549,7 @@ new Chart(document.getElementById('riskChart'), {
     ],
     datasets: [{
       data: [D.metrics.risk.high, D.metrics.risk.medium, D.metrics.risk.low],
-      backgroundColor: ['rgba(198,40,40,.7)', 'rgba(245,127,23,.7)', 'rgba(56,139,253,.5)'],
+      backgroundColor: ['rgba(198,40,40,.75)', 'rgba(245,127,23,.75)', 'rgba(56,139,253,.5)'],
       borderWidth: 2, borderColor: '#fff',
     }]
   },
@@ -541,13 +559,38 @@ new Chart(document.getElementById('riskChart'), {
   }
 });
 
+// ── Chart 4: Risk by project (stacked bar) ───────────────────────────────────
+(function() {
+  const rbp = (D.metrics.risk.byProject || []).slice(0, 10);
+  new Chart(document.getElementById('riskByProjectChart'), {
+    type: 'bar',
+    data: {
+      labels: rbp.map(r => r.name.length > 22 ? r.name.slice(0,22)+'…' : r.name),
+      datasets: [
+        { label: 'High',   data: rbp.map(r => r.high),   backgroundColor: 'rgba(198,40,40,.75)' },
+        { label: 'Medium', data: rbp.map(r => r.medium), backgroundColor: 'rgba(245,127,23,.75)' },
+        { label: 'Low',    data: rbp.map(r => r.low),    backgroundColor: 'rgba(56,139,253,.5)'  },
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        x: { stacked: true },
+        y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Issues' } }
+      }
+    }
+  });
+})();
+
 // ── Risk lists ───────────────────────────────────────────────────────────────
 function renderRiskList(items, elId, cls) {
   const el = document.getElementById(elId);
-  if (!items.length) { el.innerHTML = '<li style="color:#888;padding:8px 10px;font-size:12px">None right now ✓</li>'; return; }
+  if (!items || !items.length) { el.innerHTML = '<li style="color:#888;padding:8px 10px;font-size:12px">None right now ✓</li>'; return; }
   el.innerHTML = items.map(i =>
     `<li class="${cls}">
-      <span>${i.title}</span>
+      <span>${i.title}<span style="color:#aaa;font-size:10px;margin-left:6px">${i.project || ''}</span></span>
       <span class="risk-info">${i.assignee || 'unassigned'} · ${i.due || 'no due date'}</span>
     </li>`
   ).join('');
@@ -555,9 +598,45 @@ function renderRiskList(items, elId, cls) {
 renderRiskList(D.metrics.risk.highItems,   'highRiskList', 'risk-high');
 renderRiskList(D.metrics.risk.mediumItems, 'medRiskList',  'risk-medium');
 
+// ── Pilot customers ──────────────────────────────────────────────────────────
+(function() {
+  const pilots = D.metrics.pilotCustomers || [];
+  if (!pilots.length) {
+    document.getElementById('pilotTable').style.display = 'none';
+    document.getElementById('pilotEmpty').style.display = 'block';
+    return;
+  }
+  const el = document.getElementById('pilotTable');
+  el.innerHTML = `<thead><tr>
+    <th>Customer / Label</th><th>Total Issues</th><th>Open</th><th>High Priority</th><th>Done</th><th>Status</th>
+  </tr></thead>`;
+  const tbody = document.createElement('tbody');
+  pilots.forEach(p => {
+    const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
+    const statusColor = p.high > 0 ? '#c62828' : p.open === 0 ? '#2e7d32' : '#f57f17';
+    const statusText  = p.high > 0 ? '⚠ Blocked' : p.open === 0 ? '✓ Clear' : 'In Progress';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${p.name}</strong></td>
+      <td style="text-align:center">${p.total}</td>
+      <td style="text-align:center;color:${p.open>0?'#1565c0':'#aaa'};font-weight:bold">${p.open}</td>
+      <td style="text-align:center;color:${p.high>0?'#c62828':'#aaa'};font-weight:bold">${p.high || '–'}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:7px">
+          <div class="prog-bg"><div class="prog-fill" style="width:${pct}%;background:#2e7d32"></div></div>
+          <span style="font-size:11px;color:#555">${pct}%</span>
+        </div>
+      </td>
+      <td style="color:${statusColor};font-weight:bold;font-size:12px">${statusText}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  el.appendChild(tbody);
+})();
+
 // ── Projects table ───────────────────────────────────────────────────────────
 (function() {
-  const ps = D.metrics.projectSummary;
+  const ps = D.metrics.projectSummary || [];
   const el = document.getElementById('projectsTable');
   el.innerHTML = `<thead><tr>
     <th>Project</th><th>Lead</th><th>Status</th><th>Progress</th>
@@ -590,32 +669,46 @@ renderRiskList(D.metrics.risk.mediumItems, 'medRiskList',  'risk-medium');
 
 // ── Load balance ─────────────────────────────────────────────────────────────
 (function() {
-  const lb = D.metrics.loadBalance;
-  const el = document.getElementById('loadTable');
-  el.innerHTML = `<thead><tr>
-    <th>Person</th><th>Total Open</th><th>In Progress</th><th>P1/P2 Open</th><th>Workload</th>
-  </tr></thead>`;
-  const tbody = document.createElement('tbody');
-  const maxActive = Math.max(...lb.map(r => r.active), 1);
-  lb.forEach(row => {
-    const pct       = Math.round((row.active / maxActive) * 100);
-    const capColor  = pct >= 80 ? '#c62828' : pct >= 50 ? '#f57f17' : '#2e7d32';
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><strong>${row.name}</strong></td>
-      <td style="text-align:center">${row.total}</td>
-      <td style="text-align:center;font-weight:bold;color:${row.active>0?'#1565c0':'#aaa'}">${row.active}</td>
-      <td style="text-align:center;color:${row.p1>0?'#c62828':'#888'};font-weight:bold">${row.p1 || '–'}</td>
-      <td>
-        <div style="display:flex;align-items:center;gap:7px">
-          <div class="cap-bg"><div class="cap-fill" style="width:${pct}%;background:${capColor}"></div></div>
-          <span style="font-size:11px;color:${capColor}">${row.active} active</span>
-        </div>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-  el.appendChild(tbody);
+  try {
+    const lb = D.metrics.loadBalance || [];
+    const el = document.getElementById('loadTable');
+    if (!lb.length) {
+      el.style.display = 'none';
+      document.getElementById('loadEmpty').style.display = 'block';
+      return;
+    }
+    el.innerHTML = `<thead><tr>
+      <th>Person</th><th>Total Open</th><th>In Progress</th><th>P1/P2 Open</th><th>Workload</th>
+    </tr></thead>`;
+    const tbody = document.createElement('tbody');
+    // Use total as workload base if nobody has active issues
+    const maxActive = Math.max(...lb.map(r => r.active));
+    const maxTotal  = Math.max(...lb.map(r => r.total));
+    const useTotal  = maxActive === 0;
+    lb.forEach(row => {
+      const base     = useTotal ? maxTotal : maxActive;
+      const val      = useTotal ? row.total : row.active;
+      const pct      = base > 0 ? Math.round((val / base) * 100) : 0;
+      const capColor = pct >= 80 ? '#c62828' : pct >= 50 ? '#f57f17' : '#2e7d32';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${row.name}</strong></td>
+        <td style="text-align:center">${row.total}</td>
+        <td style="text-align:center;font-weight:bold;color:${row.active>0?'#1565c0':'#aaa'}">${row.active || '–'}</td>
+        <td style="text-align:center;color:${row.p1>0?'#c62828':'#888'};font-weight:bold">${row.p1 || '–'}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:7px">
+            <div class="cap-bg"><div class="cap-fill" style="width:${pct}%;background:${capColor}"></div></div>
+            <span style="font-size:11px;color:${capColor}">${useTotal ? row.total+' open' : row.active+' active'}</span>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+    el.appendChild(tbody);
+  } catch(e) {
+    document.getElementById('loadTable').innerHTML = `<tbody><tr><td style="color:#c62828;padding:12px">Error rendering load balance: ${e.message}</td></tr></tbody>`;
+  }
 })();
 </script>
 </body>

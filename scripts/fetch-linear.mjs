@@ -229,6 +229,55 @@ function deriveMetrics(issues, projects) {
     iss.state.type !== 'started'
   );
 
+  // ── Risk by project (for stacked bar chart) ───────────────────────────────
+  const riskByProjectMap = {};
+  const addRisk = (iss, level) => {
+    const proj = iss.project?.name || 'No Project';
+    if (!riskByProjectMap[proj]) riskByProjectMap[proj] = { high: 0, medium: 0, low: 0 };
+    riskByProjectMap[proj][level]++;
+  };
+  highRisk.forEach(i => addRisk(i, 'high'));
+  mediumRisk.forEach(i => addRisk(i, 'medium'));
+  lowRisk.forEach(i => addRisk(i, 'low'));
+  const riskByProject = Object.entries(riskByProjectMap)
+    .sort((a, b) => (b[1].high + b[1].medium) - (a[1].high + a[1].medium))
+    .map(([name, counts]) => ({ name, ...counts }));
+
+  // ── Pilot customers: detect via labels or project names ───────────────────
+  const pilotProjectMap = {};
+  issues.forEach(iss => {
+    const labels = iss.labels?.nodes || [];
+    const pilotLabel = labels.find(l => /pilot|customer|client|grower|farm/i.test(l.name));
+    if (pilotLabel) {
+      const key = pilotLabel.name;
+      if (!pilotProjectMap[key]) pilotProjectMap[key] = { total: 0, open: 0, high: 0, done: 0, color: pilotLabel.color };
+      pilotProjectMap[key].total++;
+      if (iss.state.type === 'completed') pilotProjectMap[key].done++;
+      else {
+        pilotProjectMap[key].open++;
+        if (iss.priority <= 2) pilotProjectMap[key].high++;
+      }
+    }
+  });
+  // Also detect by project names containing pilot/customer keywords
+  projects.forEach(proj => {
+    if (/pilot|customer|client|grower|farm/i.test(proj.name)) {
+      if (!pilotProjectMap[proj.name]) {
+        const projIssues = issues.filter(i => i.project?.id === proj.id);
+        pilotProjectMap[proj.name] = {
+          total: projIssues.length,
+          open:  projIssues.filter(i => i.state.type !== 'completed').length,
+          high:  projIssues.filter(i => i.priority <= 2 && i.state.type !== 'completed').length,
+          done:  projIssues.filter(i => i.state.type === 'completed').length,
+          color: null,
+        };
+      }
+    }
+  });
+  const pilotCustomers = Object.entries(pilotProjectMap)
+    .sort((a, b) => b[1].open - a[1].open)
+    .map(([name, stats]) => ({ name, ...stats }));
+
   // ── Load balance per assignee ──────────────────────────────────────────────
   const assigneeMap = {};
   openIssues.forEach(iss => {
@@ -240,7 +289,7 @@ function deriveMetrics(issues, projects) {
   });
 
   const loadBalance = Object.entries(assigneeMap)
-    .sort((a, b) => b[1].active - a[1].active)
+    .sort((a, b) => (b[1].active + b[1].p1) - (a[1].active + a[1].p1))
     .map(([name, stats]) => ({ name, ...stats }));
 
   // ── Milestone-style: projects summary ─────────────────────────────────────
@@ -275,11 +324,13 @@ function deriveMetrics(issues, projects) {
       high:   highRisk.length,
       medium: mediumRisk.length,
       low:    lowRisk.length,
-      highItems:   highRisk.slice(0, 5).map(i => ({ title: i.title, due: i.dueDate, assignee: i.assignee?.name })),
-      mediumItems: mediumRisk.slice(0, 5).map(i => ({ title: i.title, due: i.dueDate, assignee: i.assignee?.name })),
+      highItems:   highRisk.slice(0, 8).map(i => ({ title: i.title, due: i.dueDate, assignee: i.assignee?.name, project: i.project?.name })),
+      mediumItems: mediumRisk.slice(0, 8).map(i => ({ title: i.title, due: i.dueDate, assignee: i.assignee?.name, project: i.project?.name })),
+      byProject: riskByProject,
     },
     loadBalance,
     projectSummary,
+    pilotCustomers,
   };
 }
 
