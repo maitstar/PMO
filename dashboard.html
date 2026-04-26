@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moss Robotics — PMO Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background-color: #f5f5f5;
+  }
+  .dashboard { max-width: 1200px; margin: 0 auto; }
+
+  h1 { color: #333; margin-bottom: 4px; }
+  .meta { color: #888; font-size: 13px; margin-bottom: 20px; }
+
+  /* Chips row */
+  .chips { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+  .chip {
+    background: white; border-radius: 8px; padding: 14px 18px;
+    box-shadow: 0 2px 4px rgba(0,0,0,.1); display: flex; flex-direction: column; min-width: 120px;
+  }
+  .chip-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+  .chip-value { font-size: 24px; font-weight: bold; line-height: 1; }
+  .chip-sub   { font-size: 11px; color: #888; margin-top: 3px; }
+  .green { color: #2e7d32; } .amber { color: #f57f17; } .red { color: #c62828; } .blue { color: #1565c0; }
+
+  /* Odometer */
+  .odo-chip {
+    background: white; border-radius: 8px; padding: 14px 18px;
+    box-shadow: 0 2px 4px rgba(0,0,0,.1); display: flex; align-items: center; gap: 12px;
+  }
+  .odo-field { display: flex; flex-direction: column; }
+  .odo-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .5px; }
+  .odo-input {
+    border: none; outline: none; font-size: 17px; font-weight: bold; color: #333;
+    width: 110px; background: transparent; cursor: text;
+  }
+  .odo-input:focus { color: #1565c0; border-bottom: 1px solid #1565c0; }
+  .odo-sep { font-size: 20px; color: #ddd; }
+  .runway-val { font-size: 24px; font-weight: bold; }
+  .runway-label { font-size: 11px; color: #888; }
+
+  /* Cards */
+  .card {
+    background: white; border-radius: 8px; padding: 20px;
+    margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,.1);
+  }
+  .card-title    { font-size: 18px; font-weight: bold; margin-bottom: 4px; color: #333; }
+  .card-subtitle { font-size: 13px; color: #888; margin-bottom: 16px; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+  @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left; padding: 9px 12px; border-bottom: 2px solid #eee;
+    color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+  }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: #fafafa; }
+
+  /* Badges */
+  .pill {
+    display: inline-block; padding: 2px 9px; border-radius: 12px;
+    font-size: 11px; font-weight: 600; color: white;
+  }
+  .status-dot { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .p1 { color: #c62828; font-weight: bold; }
+  .p2 { color: #f57f17; font-weight: bold; }
+  .p3 { color: #555; }
+
+  /* Progress bar */
+  .prog-bg { width: 80px; height: 7px; background: #eee; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; }
+  .prog-fill { height: 100%; border-radius: 4px; }
+
+  /* Cap bar */
+  .cap-bg  { width: 70px; height: 7px; background: #eee; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; }
+  .cap-fill { height: 100%; border-radius: 4px; }
+
+  /* Risk items */
+  .risk-list { list-style: none; padding: 0; margin: 8px 0 0; }
+  .risk-list li {
+    padding: 7px 10px; margin-bottom: 5px; border-radius: 6px;
+    font-size: 12px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .risk-high   { background: #fce8e8; border-left: 3px solid #c62828; }
+  .risk-medium { background: #fff3e0; border-left: 3px solid #f57f17; }
+  .risk-info   { color: #888; font-size: 11px; }
+
+  .fetched-at { font-size: 11px; color: #aaa; margin-top: 30px; text-align: right; }
+</style>
+</head>
+<body>
+<script>
+window.__LINEAR_DATA__ = {"fetchedAt":"2026-04-26T11:54:20.939Z","org":"mait","issues":[{"id":"d8131d71-fe12-4c91-bfcf-db3477c16b66","title":"Prospect outreach campaign — 5 qualified leads","priority":2,"priorityLabel":"High","state":{"name":"Backlog","type":"backlog"},"assignee":null,"dueDate":"2026-09-30","completedAt":null,"createdAt":"2026-04-23T20:26:08.806Z","startedAt":null,"project":{"id":"19bdab2c-32ae-45a7-99c5-3e68e4ce9d95","name":"Prospect Outreach & Pipeline","targetDate":"2026-09-30","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"b7f4535e-ed76-47ac-b548-1d0bc0aa3b09","title":"Instagram + Twitter account setup & first posts","priority":4,"priorityLabel":"Low","state":{"name":"Backlog","type":"backlog"},"assignee":null,"dueDate":"2026-07-31","completedAt":null,"createdAt":"2026-04-23T20:26:08.510Z","startedAt":null,"project":{"id":"6dc742cf-eb2a-4d3c-a7b4-2b0e23691729","name":"Social Media Content Process","targetDate":"2026-07-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"f373fcb7-0b40-40aa-b75a-5a68822d18f3","title":"Post 3 engineering roles (LinkedIn + job boards)","priority":3,"priorityLabel":"Medium","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-06-30","completedAt":null,"createdAt":"2026-04-23T20:26:08.283Z","startedAt":null,"project":{"id":"33897f50-54e5-4a69-9b84-4a13e29ed67c","name":"Engineering Hiring — Q3 (2-3 Roles)","targetDate":"2026-08-31","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"0c4bb277-4379-41e1-b23a-2151abc16c69","title":"Enterprise sales hire — define role & post","priority":3,"priorityLabel":"Medium","state":{"name":"Backlog","type":"backlog"},"assignee":null,"dueDate":"2026-08-31","completedAt":null,"createdAt":"2026-04-23T20:26:08.004Z","startedAt":null,"project":{"id":"19bdab2c-32ae-45a7-99c5-3e68e4ce9d95","name":"Prospect Outreach & Pipeline","targetDate":"2026-09-30","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"4487b0ab-66bd-4918-bb33-ee1622ead5b6","title":"Define customer health score framework","priority":3,"priorityLabel":"Medium","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-07-15","completedAt":null,"createdAt":"2026-04-23T20:26:07.452Z","startedAt":null,"project":{"id":"c4d18622-68d5-426f-a8bc-9b2cc6017152","name":"Customer Success Playbook","targetDate":"2026-06-15","startDate":"2026-04-24","progress":0.16666666666666666},"labels":{"nodes":[]}},{"id":"1f24db33-1be1-4a1b-8ae1-f7fc04cf65a4","title":"LinkedIn content calendar — Q2/Q3","priority":4,"priorityLabel":"Low","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-06-15","completedAt":null,"createdAt":"2026-04-23T20:26:07.246Z","startedAt":null,"project":{"id":"6dc742cf-eb2a-4d3c-a7b4-2b0e23691729","name":"Social Media Content Process","targetDate":"2026-07-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"0404dede-e905-46bd-8892-47a7e8cdac5d","title":"Financial model & 3-year projections","priority":1,"priorityLabel":"Urgent","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-08-15","completedAt":null,"createdAt":"2026-04-23T20:26:07.027Z","startedAt":null,"project":{"id":"dfb0d4e3-28eb-4a38-8558-1be93b1d1ead","name":"Due Diligence Preparation","targetDate":"2026-10-01","startDate":"2026-04-24","progress":0},"labels":{"nodes":[]}},{"id":"431083fa-4522-446c-aea1-cce3dc5d6492","title":"Per-customer feedback sessions (monthly)","priority":2,"priorityLabel":"High","state":{"name":"In Progress","type":"started"},"assignee":null,"dueDate":null,"completedAt":null,"createdAt":"2026-04-23T20:26:06.817Z","startedAt":"2026-04-23T20:26:06.860Z","project":{"id":"c4d18622-68d5-426f-a8bc-9b2cc6017152","name":"Customer Success Playbook","targetDate":"2026-06-15","startDate":"2026-04-24","progress":0.16666666666666666},"labels":{"nodes":[]}},{"id":"ed5b6e03-ea4b-4d79-8e19-126db138a293","title":"Map warm intro paths via network","priority":2,"priorityLabel":"High","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-08-15","completedAt":null,"createdAt":"2026-04-23T20:26:06.209Z","startedAt":null,"project":{"id":"04a42233-59d8-4077-a85f-9c4881fed952","name":"Investor Targeting & Warm Intros","targetDate":"2026-10-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"513361cf-b074-4566-b513-9ff7b080dc1f","title":"Cap table cleanup & legal review","priority":2,"priorityLabel":"High","state":{"name":"Backlog","type":"backlog"},"assignee":null,"dueDate":"2026-09-01","completedAt":null,"createdAt":"2026-04-23T20:26:05.984Z","startedAt":null,"project":{"id":"dfb0d4e3-28eb-4a38-8558-1be93b1d1ead","name":"Due Diligence Preparation","targetDate":"2026-10-01","startDate":"2026-04-24","progress":0},"labels":{"nodes":[]}},{"id":"b8c32ded-bc19-4776-a8a1-ad18d29449d5","title":"IP assignment documentation","priority":2,"priorityLabel":"High","state":{"name":"Backlog","type":"backlog"},"assignee":null,"dueDate":"2026-09-01","completedAt":null,"createdAt":"2026-04-23T20:26:05.767Z","startedAt":null,"project":{"id":"dfb0d4e3-28eb-4a38-8558-1be93b1d1ead","name":"Due Diligence Preparation","targetDate":"2026-10-01","startDate":"2026-04-24","progress":0},"labels":{"nodes":[]}},{"id":"6d96eafd-b3d1-40d1-832b-c572677181c9","title":"Send first wave of intro requests","priority":2,"priorityLabel":"High","state":{"name":"Backlog","type":"backlog"},"assignee":null,"dueDate":"2026-09-01","completedAt":null,"createdAt":"2026-04-23T20:26:05.540Z","startedAt":null,"project":{"id":"04a42233-59d8-4077-a85f-9c4881fed952","name":"Investor Targeting & Warm Intros","targetDate":"2026-10-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"5a8b4085-12b1-426d-856c-0111ce5d5814","title":"Build target investor list (50 names)","priority":2,"priorityLabel":"High","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-08-01","completedAt":null,"createdAt":"2026-04-23T20:26:04.315Z","startedAt":null,"project":{"id":"04a42233-59d8-4077-a85f-9c4881fed952","name":"Investor Targeting & Warm Intros","targetDate":"2026-10-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"db35ec76-209c-40e2-903f-184057b8eed8","title":"Analytics dashboard design & mockups","priority":4,"priorityLabel":"Low","state":{"name":"Backlog","type":"backlog"},"assignee":null,"dueDate":"2026-07-15","completedAt":null,"createdAt":"2026-04-23T20:26:04.070Z","startedAt":null,"project":{"id":"ed01f4bf-b1ec-43b5-9258-33f75b99d296","name":"Analytics Dashboard — v1","targetDate":"2026-07-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"b960540a-87ce-44be-b824-e71438e36947","title":"Define analytics requirements with pilot customers","priority":3,"priorityLabel":"Medium","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-06-15","completedAt":null,"createdAt":"2026-04-23T20:26:03.874Z","startedAt":null,"project":{"id":"ed01f4bf-b1ec-43b5-9258-33f75b99d296","name":"Analytics Dashboard — v1","targetDate":"2026-07-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"facd8540-7041-4fb2-8d58-3f4a0bd49c37","title":"Analytics backend & data pipeline","priority":4,"priorityLabel":"Low","state":{"name":"Backlog","type":"backlog"},"assignee":null,"dueDate":"2026-07-31","completedAt":null,"createdAt":"2026-04-23T20:26:03.669Z","startedAt":null,"project":{"id":"ed01f4bf-b1ec-43b5-9258-33f75b99d296","name":"Analytics Dashboard — v1","targetDate":"2026-07-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"f2cc145a-c83a-42ca-9fcb-a4b4f2fc9cf2","title":"🚫 Customer dashboard — HW data integration","priority":2,"priorityLabel":"High","state":{"name":"Backlog","type":"backlog"},"assignee":null,"dueDate":"2026-06-30","completedAt":null,"createdAt":"2026-04-23T20:26:03.104Z","startedAt":null,"project":{"id":"5c7ca613-4f0e-4e51-9507-0e9064cfdefb","name":"Frontend — Customer App","targetDate":"2026-06-30","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"6fcce8d7-e8dc-4015-ad67-e2148245eee8","title":"UI wireframes & design system","priority":2,"priorityLabel":"High","state":{"name":"In Progress","type":"started"},"assignee":null,"dueDate":"2026-05-30","completedAt":null,"createdAt":"2026-04-23T20:26:02.689Z","startedAt":"2026-04-23T20:26:02.777Z","project":{"id":"5c7ca613-4f0e-4e51-9507-0e9064cfdefb","name":"Frontend — Customer App","targetDate":"2026-06-30","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"4b1eac12-58be-414a-b5f4-cf21c771b8ba","title":"Frontend scaffolding & routing","priority":3,"priorityLabel":"Medium","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-06-15","completedAt":null,"createdAt":"2026-04-23T20:26:02.564Z","startedAt":null,"project":{"id":"5c7ca613-4f0e-4e51-9507-0e9064cfdefb","name":"Frontend — Customer App","targetDate":"2026-06-30","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"769d51da-3e7e-42a7-a24b-f5ced897cbf1","title":"🚫 Field test at customer sites","priority":2,"priorityLabel":"High","state":{"name":"Backlog","type":"backlog"},"assignee":null,"dueDate":"2026-06-15","completedAt":null,"createdAt":"2026-04-23T20:26:02.454Z","startedAt":null,"project":{"id":"91f5abac-cf56-4d35-81d2-f5aacc5475c6","name":"Hardware Testing — Bench & Field","targetDate":"2026-06-15","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"78e5f289-59de-4976-a983-faa499cbcd78","title":"🚫 Execute bench tests","priority":2,"priorityLabel":"High","state":{"name":"Backlog","type":"backlog"},"assignee":null,"dueDate":"2026-06-10","completedAt":null,"createdAt":"2026-04-23T20:26:01.832Z","startedAt":null,"project":{"id":"91f5abac-cf56-4d35-81d2-f5aacc5475c6","name":"Hardware Testing — Bench & Field","targetDate":"2026-06-15","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"a7e70edf-5e02-4f85-b146-6470077eb109","title":"Identify backup sensor supplier","priority":1,"priorityLabel":"Urgent","state":{"name":"In Progress","type":"started"},"assignee":null,"dueDate":"2026-05-10","completedAt":null,"createdAt":"2026-04-23T20:26:01.590Z","startedAt":"2026-04-23T20:26:01.633Z","project":{"id":"fdc19ebf-2281-4a42-a0a2-75f028a9edbb","name":"Supplier & Procurement Management","targetDate":"2026-05-15","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"784a9b81-1b3e-42b0-9309-74af4656f598","title":"Design bench test protocol","priority":2,"priorityLabel":"High","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-06-01","completedAt":null,"createdAt":"2026-04-23T20:26:01.379Z","startedAt":null,"project":{"id":"91f5abac-cf56-4d35-81d2-f5aacc5475c6","name":"Hardware Testing — Bench & Field","targetDate":"2026-06-15","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"12b5bb21-6aa8-48f0-8a7c-f2fab6be54a9","title":"Submit component purchase orders","priority":2,"priorityLabel":"High","state":{"name":"Backlog","type":"backlog"},"assignee":null,"dueDate":"2026-05-20","completedAt":null,"createdAt":"2026-04-23T20:26:01.143Z","startedAt":null,"project":{"id":"fdc19ebf-2281-4a42-a0a2-75f028a9edbb","name":"Supplier & Procurement Management","targetDate":"2026-05-15","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"e144fd24-afbe-498f-8e13-09aa302d16ea","title":"Select manufacturing partner","priority":2,"priorityLabel":"High","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-05-20","completedAt":null,"createdAt":"2026-04-23T20:26:00.622Z","startedAt":null,"project":{"id":"e2d3c681-979f-4b27-9b76-915c7a789570","name":"Mechanical Assembly & CAD","targetDate":"2026-05-25","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"a47f20b5-2b1d-422b-8766-150f6d78fa98","title":"DFM review with manufacturing partner","priority":3,"priorityLabel":"Medium","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-05-25","completedAt":null,"createdAt":"2026-04-23T20:26:00.346Z","startedAt":null,"project":{"id":"e2d3c681-979f-4b27-9b76-915c7a789570","name":"Mechanical Assembly & CAD","targetDate":"2026-05-25","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"7303ae30-ec3a-4df0-b7dd-6fe94da1058a","title":"Complete CAD design for sensor housing","priority":2,"priorityLabel":"High","state":{"name":"In Progress","type":"started"},"assignee":null,"dueDate":"2026-05-15","completedAt":null,"createdAt":"2026-04-23T20:26:00.057Z","startedAt":"2026-04-23T20:26:00.094Z","project":{"id":"e2d3c681-979f-4b27-9b76-915c7a789570","name":"Mechanical Assembly & CAD","targetDate":"2026-05-25","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"e1db7ac2-549f-4abb-9397-c46a876b91b7","title":"🚫 Confirm sensor supplier ship date","priority":1,"priorityLabel":"Urgent","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-05-05","completedAt":null,"createdAt":"2026-04-23T20:25:59.790Z","startedAt":null,"project":{"id":"fdc19ebf-2281-4a42-a0a2-75f028a9edbb","name":"Supplier & Procurement Management","targetDate":"2026-05-15","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"65abfb3c-be8f-45f7-9ba4-0c841be56df2","title":"Content workflow: raw idea → published post","priority":4,"priorityLabel":"Low","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-06-30","completedAt":null,"createdAt":"2026-04-23T20:22:37.633Z","startedAt":null,"project":{"id":"6dc742cf-eb2a-4d3c-a7b4-2b0e23691729","name":"Social Media Content Process","targetDate":"2026-07-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"5651c51a-22cc-4ed3-93a6-79599860c081","title":"Build technical interview process","priority":3,"priorityLabel":"Medium","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-06-15","completedAt":null,"createdAt":"2026-04-23T20:22:37.357Z","startedAt":null,"project":{"id":"33897f50-54e5-4a69-9b84-4a13e29ed67c","name":"Engineering Hiring — Q3 (2-3 Roles)","targetDate":"2026-08-31","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"71d77b0a-af5a-47e1-84a1-6eb15a4ac138","title":"⚠️ Sales hire posting — gated on Series A close","priority":3,"priorityLabel":"Medium","state":{"name":"Backlog","type":"backlog"},"assignee":null,"dueDate":"2026-09-01","completedAt":null,"createdAt":"2026-04-23T20:22:37.117Z","startedAt":null,"project":{"id":"19bdab2c-32ae-45a7-99c5-3e68e4ce9d95","name":"Prospect Outreach & Pipeline","targetDate":"2026-09-30","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"51829a4a-8b69-4234-a975-19007fcf8dbd","title":"Define engineering role specs (2-3 roles)","priority":3,"priorityLabel":"Medium","state":{"name":"In Progress","type":"started"},"assignee":null,"dueDate":"2026-05-31","completedAt":null,"createdAt":"2026-04-23T20:22:36.899Z","startedAt":"2026-04-23T20:22:36.944Z","project":{"id":"33897f50-54e5-4a69-9b84-4a13e29ed67c","name":"Engineering Hiring — Q3 (2-3 Roles)","targetDate":"2026-08-31","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"dd4f5b5d-6483-47a3-b36f-c2726a6e8126","title":"Data room setup","priority":2,"priorityLabel":"High","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-08-15","completedAt":null,"createdAt":"2026-04-23T20:22:36.321Z","startedAt":null,"project":{"id":"d320f98e-010a-4140-bbfb-e075f0fe7685","name":"Series A — Investment Materials","targetDate":"2026-10-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"9c2e884b-41b2-4ebe-9a1a-c64d9b7072ea","title":"ROI calculator & one-pager","priority":3,"priorityLabel":"Medium","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-08-01","completedAt":null,"createdAt":"2026-04-23T20:22:36.080Z","startedAt":null,"project":{"id":"3dab972d-212b-46d2-b56e-a4560d92de80","name":"Sales Deck & Collateral","targetDate":"2026-08-01","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"1de5309d-c2c3-40c3-9740-d1eaa3d4d0bf","title":"Lead investor outreach — first 10 targets","priority":2,"priorityLabel":"High","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-09-01","completedAt":null,"createdAt":"2026-04-23T20:22:35.873Z","startedAt":null,"project":{"id":"d320f98e-010a-4140-bbfb-e075f0fe7685","name":"Series A — Investment Materials","targetDate":"2026-10-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"fa2800ce-6a7b-44ce-8e00-62b6229bd722","title":"Investment deck — Series A draft","priority":2,"priorityLabel":"High","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-08-01","completedAt":null,"createdAt":"2026-04-23T20:22:35.617Z","startedAt":null,"project":{"id":"d320f98e-010a-4140-bbfb-e075f0fe7685","name":"Series A — Investment Materials","targetDate":"2026-10-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"e0b56753-54f1-4aa7-8790-f23c14cffbf1","title":"Finalize pricing model for pilot conversion","priority":2,"priorityLabel":"High","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-07-15","completedAt":null,"createdAt":"2026-04-23T20:22:35.024Z","startedAt":null,"project":{"id":"8fefe3f6-faa8-4a0b-90d1-7803a000a4b9","name":"Pricing & Contract Templates","targetDate":"2026-07-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"2b24f5d6-870e-4bb3-ac6c-6ed37d068b0a","title":"Draft customer success playbook","priority":2,"priorityLabel":"High","state":{"name":"In Progress","type":"started"},"assignee":null,"dueDate":"2026-06-15","completedAt":null,"createdAt":"2026-04-23T20:22:34.813Z","startedAt":"2026-04-23T20:22:34.855Z","project":{"id":"c4d18622-68d5-426f-a8bc-9b2cc6017152","name":"Customer Success Playbook","targetDate":"2026-06-15","startDate":"2026-04-24","progress":0.16666666666666666},"labels":{"nodes":[]}},{"id":"38e157e9-b899-4514-b6a9-4bc509e8b63b","title":"Draft contract templates for paid customers","priority":3,"priorityLabel":"Medium","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-07-31","completedAt":null,"createdAt":"2026-04-23T20:22:34.140Z","startedAt":null,"project":{"id":"8fefe3f6-faa8-4a0b-90d1-7803a000a4b9","name":"Pricing & Contract Templates","targetDate":"2026-07-31","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"84882ccf-f32c-43b5-b13c-3f82b7714f0e","title":"Sales deck v1 — build from pilot proof points","priority":2,"priorityLabel":"High","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-07-15","completedAt":null,"createdAt":"2026-04-23T20:22:33.902Z","startedAt":null,"project":{"id":"3dab972d-212b-46d2-b56e-a4560d92de80","name":"Sales Deck & Collateral","targetDate":"2026-08-01","startDate":null,"progress":0},"labels":{"nodes":[]}},{"id":"64c63a8a-017e-445b-9b1a-0dee2f6d4cab","title":"Deploy & onboard customers 5–8","priority":2,"priorityLabel":"High","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-06-30","completedAt":null,"createdAt":"2026-04-23T20:22:32.532Z","startedAt":null,"project":{"id":"a23815b5-34ef-4929-9256-be92704038c9","name":"Pilot Cohort 1 — 8 Customer Deployments","targetDate":"2026-07-31","startDate":"2026-04-24","progress":0.125},"labels":{"nodes":[]}},{"id":"a23cca1c-7186-4770-85c6-28d1c16f4350","title":"🚫 Backend integration with HW API","priority":1,"priorityLabel":"Urgent","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-06-15","completedAt":null,"createdAt":"2026-04-23T20:22:32.069Z","startedAt":null,"project":{"id":"a2c08887-f6e1-4c26-a564-51531faad69a","name":"API Design & Backend Services","targetDate":"2026-06-30","startDate":"2026-04-24","progress":0.125},"labels":{"nodes":[]}},{"id":"4bb6769e-9529-4502-a654-7f99d9eeefa0","title":"Deploy & onboard customers 1–4","priority":2,"priorityLabel":"High","state":{"name":"In Progress","type":"started"},"assignee":null,"dueDate":null,"completedAt":null,"createdAt":"2026-04-23T20:22:31.798Z","startedAt":"2026-04-23T20:22:31.837Z","project":{"id":"a23815b5-34ef-4929-9256-be92704038c9","name":"Pilot Cohort 1 — 8 Customer Deployments","targetDate":"2026-07-31","startDate":"2026-04-24","progress":0.125},"labels":{"nodes":[]}},{"id":"39e1e99c-fbd7-494f-bc7c-3c86773fb0de","title":"Variety data import — build & ship v1","priority":2,"priorityLabel":"High","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-06-30","completedAt":null,"createdAt":"2026-04-23T20:22:31.526Z","startedAt":null,"project":{"id":"330283db-25d2-4a3f-956b-c71cb1e29e7e","name":"Variety Data Import — v1","targetDate":"2026-06-30","startDate":"2026-04-24","progress":0},"labels":{"nodes":[]}},{"id":"60840a74-0b1f-45fc-af32-bc06afb75c78","title":"API design — complete v1 spec","priority":2,"priorityLabel":"High","state":{"name":"In Progress","type":"started"},"assignee":null,"dueDate":"2026-05-25","completedAt":null,"createdAt":"2026-04-23T20:22:30.092Z","startedAt":"2026-04-23T20:22:30.119Z","project":{"id":"a2c08887-f6e1-4c26-a564-51531faad69a","name":"API Design & Backend Services","targetDate":"2026-06-30","startDate":"2026-04-24","progress":0.125},"labels":{"nodes":[]}},{"id":"81def3c7-9d80-4840-95d6-6e3565361470","title":"🚫 Resolve sensor supplier ETA","priority":1,"priorityLabel":"Urgent","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-05-10","completedAt":null,"createdAt":"2026-04-23T20:22:29.726Z","startedAt":null,"project":{"id":"1edb1dae-0d1e-4fbd-b8c4-50ba3de47ae0","name":"Sensor Integration","targetDate":"2026-05-30","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"01612da2-9c16-433d-ab7c-dae7daaf1dee","title":"Manufacturing readiness review","priority":2,"priorityLabel":"High","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":"2026-05-25","completedAt":null,"createdAt":"2026-04-23T20:22:29.620Z","startedAt":null,"project":{"id":"1edb1dae-0d1e-4fbd-b8c4-50ba3de47ae0","name":"Sensor Integration","targetDate":"2026-05-30","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"c480d6d2-5fca-4af0-8a6b-5d5addf08569","title":"Field test protocol design","priority":2,"priorityLabel":"High","state":{"name":"In Progress","type":"started"},"assignee":null,"dueDate":"2026-05-20","completedAt":null,"createdAt":"2026-04-23T20:22:29.408Z","startedAt":"2026-04-23T20:22:29.461Z","project":{"id":"1edb1dae-0d1e-4fbd-b8c4-50ba3de47ae0","name":"Sensor Integration","targetDate":"2026-05-30","startDate":"2026-04-24","progress":0.08333333333333333},"labels":{"nodes":[]}},{"id":"f148f117-8287-4585-ae8c-a97df4b5aa00","title":"Get familiar with Linear","priority":0,"priorityLabel":"No priority","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":null,"completedAt":null,"createdAt":"2026-04-10T14:40:56.785Z","startedAt":null,"project":null,"labels":{"nodes":[]}},{"id":"ed81d3fa-da98-4418-91d8-b22418445965","title":"Connect your tools","priority":0,"priorityLabel":"No priority","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":null,"completedAt":null,"createdAt":"2026-04-10T14:40:56.785Z","startedAt":null,"project":null,"labels":{"nodes":[]}},{"id":"b2f34970-7157-4f80-a878-03b8513fba2b","title":"Import your data","priority":0,"priorityLabel":"No priority","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":null,"completedAt":null,"createdAt":"2026-04-10T14:40:56.785Z","startedAt":null,"project":null,"labels":{"nodes":[]}},{"id":"1e04d4c7-1ba8-4459-a3be-2441164f8531","title":"Set up your teams","priority":0,"priorityLabel":"No priority","state":{"name":"Todo","type":"unstarted"},"assignee":null,"dueDate":null,"completedAt":null,"createdAt":"2026-04-10T14:40:56.785Z","startedAt":null,"project":null,"labels":{"nodes":[]}}],"projects":[{"id":"dfb0d4e3-28eb-4a38-8558-1be93b1d1ead","name":"Due Diligence Preparation","description":"Legal, financial, and technical due diligence prep. Data room organization, cap table cleanup, IP assignments. Start 60 days before target close.","progress":0,"targetDate":"2026-10-01","startDate":"2026-04-24","status":{"type":"started","name":"In Progress"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"33897f50-54e5-4a69-9b84-4a13e29ed67c","name":"Engineering Hiring — Q3 (2-3 Roles)","description":"Define role specs, build technical interview process, post and fill 2-3 engineering roles. Some offers may gate on Series A close.","progress":0.08333333333333333,"targetDate":"2026-08-31","startDate":"2026-04-24","status":{"type":"started","name":"In Progress"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"330283db-25d2-4a3f-956b-c71cb1e29e7e","name":"Variety Data Import — v1","description":"Allow customers to import variety info (name, common name, grade buckets). This is the feature customers are actively waiting for. Target: June 30.","progress":0,"targetDate":"2026-06-30","startDate":"2026-04-24","status":{"type":"started","name":"In Progress"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"5c7ca613-4f0e-4e51-9507-0e9064cfdefb","name":"Frontend — Customer App","description":"Customer-facing frontend application. Depends on API design completion. Can begin UI scaffolding now.","progress":0.08333333333333333,"targetDate":"2026-06-30","startDate":"2026-04-24","status":{"type":"started","name":"In Progress"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"c4d18622-68d5-426f-a8bc-9b2cc6017152","name":"Customer Success Playbook","description":"Document support processes, escalation paths, and feedback cadences. Required before we can scale beyond 8 customers.","progress":0.16666666666666666,"targetDate":"2026-06-15","startDate":"2026-04-24","status":{"type":"started","name":"In Progress"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"a23815b5-34ef-4929-9256-be92704038c9","name":"Pilot Cohort 1 — 8 Customer Deployments","description":"All 8 pilot customers have hardware. Tracking onboarding, training, and go-live per customer. High back-and-forth ongoing.","progress":0.125,"targetDate":"2026-07-31","startDate":"2026-04-24","status":{"type":"started","name":"In Progress"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"1edb1dae-0d1e-4fbd-b8c4-50ba3de47ae0","name":"Sensor Integration","description":"Design, build, and validate sensor hardware unit. 3 milestones: design → prototype → validation.","progress":0.08333333333333333,"targetDate":"2026-05-30","startDate":"2026-04-24","status":{"type":"started","name":"In Progress"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"fdc19ebf-2281-4a42-a0a2-75f028a9edbb","name":"Supplier & Procurement Management","description":"Track sensor supplier ETA (currently May 15), manage component sourcing and purchase orders.","progress":0.08333333333333333,"targetDate":"2026-05-15","startDate":"2026-04-24","status":{"type":"started","name":"In Progress"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"a2c08887-f6e1-4c26-a564-51531faad69a","name":"API Design & Backend Services","description":"Core API design and backend integration layer. API design in progress; backend HW integration blocked until June 15.","progress":0.125,"targetDate":"2026-06-30","startDate":"2026-04-24","status":{"type":"started","name":"In Progress"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"e2d3c681-979f-4b27-9b76-915c7a789570","name":"Mechanical Assembly & CAD","description":"Mechanical design and manufacturing. 2 milestones: CAD complete → manufacturing ready.","progress":0.08333333333333333,"targetDate":"2026-05-25","startDate":"2026-04-24","status":{"type":"started","name":"In Progress"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"6dc742cf-eb2a-4d3c-a7b4-2b0e23691729","name":"Social Media Content Process","description":"Build raw → draft → review → publish workflow. No dedicated owner. Content from engineers, designers, field ops. Publish on LinkedIn, Instagram, Twitter.","progress":0,"targetDate":"2026-07-31","startDate":null,"status":{"type":"backlog","name":"Backlog"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"19bdab2c-32ae-45a7-99c5-3e68e4ce9d95","name":"Prospect Outreach & Pipeline","description":"5 qualified leads by Sep 30. Enterprise sales hire needed. Outreach campaign planned for Aug 1.","progress":0,"targetDate":"2026-09-30","startDate":null,"status":{"type":"backlog","name":"Backlog"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"d320f98e-010a-4140-bbfb-e075f0fe7685","name":"Series A — Investment Materials","description":"Investment deck, financial model, impact metrics, data room setup. Cannot credibly run process without revenue traction from pilots.","progress":0,"targetDate":"2026-10-31","startDate":null,"status":{"type":"backlog","name":"Backlog"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"04a42233-59d8-4077-a85f-9c4881fed952","name":"Investor Targeting & Warm Intros","description":"Build target investor list, run warm intro process, cold outreach for gaps. Should be a project under FR-01, not a standalone initiative.","progress":0,"targetDate":"2026-10-31","startDate":null,"status":{"type":"backlog","name":"Backlog"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"8fefe3f6-faa8-4a0b-90d1-7803a000a4b9","name":"Pricing & Contract Templates","description":"Finalize pricing model and contract templates to enable pilot-to-paid conversion. Target: 6/8 customers converted by Aug 31.","progress":0,"targetDate":"2026-07-31","startDate":null,"status":{"type":"backlog","name":"Backlog"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"3dab972d-212b-46d2-b56e-a4560d92de80","name":"Sales Deck & Collateral","description":"Sales deck v1, one-pager, ROI calculator. Blocked on pilot conversion proof points. ETA: July 15.","progress":0,"targetDate":"2026-08-01","startDate":null,"status":{"type":"backlog","name":"Backlog"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"ed01f4bf-b1ec-43b5-9258-33f75b99d296","name":"Analytics Dashboard — v1","description":"Internal and customer-facing data visualization. Planned for Q3 — deprioritized behind core platform.","progress":0,"targetDate":"2026-07-31","startDate":null,"status":{"type":"backlog","name":"Backlog"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"91f5abac-cf56-4d35-81d2-f5aacc5475c6","name":"Hardware Testing — Bench & Field","description":"Bench test protocol, field test execution, and manufacturing readiness review. Blocked until prototype ships.","progress":0,"targetDate":"2026-06-15","startDate":null,"status":{"type":"backlog","name":"Backlog"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null},{"id":"9f6cfbed-2b58-4fdc-b81a-792356a4e0e1","name":"Claude","description":"","progress":0,"targetDate":null,"startDate":null,"status":{"type":"backlog","name":"Backlog"},"completedIssueCountHistory":[],"issueCountHistory":[],"members":{"nodes":[]},"lead":null}],"teams":[{"id":"d634a5aa-9ffb-436d-8513-57ea23f7bb03","name":"Mait","members":{"nodes":[{"id":"7aeabbc2-07c9-4bf0-8c87-04f0a229a4ad","name":"Maitreyi Menon","displayName":"maitwork1"}]}}],"metrics":{"completionByMonth":[{"planned":0,"actual":null,"predicted":null},{"planned":0,"actual":null,"predicted":null},{"planned":0,"actual":null,"predicted":null},{"planned":0,"actual":null,"predicted":0},{"planned":11,"actual":null,"predicted":0},{"planned":27,"actual":null,"predicted":0},{"planned":43,"actual":null,"predicted":0},{"planned":59,"actual":null,"predicted":0},{"planned":76,"actual":null,"predicted":0},{"planned":91,"actual":null,"predicted":0},{"planned":100,"actual":null,"predicted":0},{"planned":100,"actual":null,"predicted":0}],"resourceAllocation":[{"name":"Customer Success Playbook","count":2,"pct":22},{"name":"Frontend — Customer App","count":1,"pct":11},{"name":"Supplier & Procurement Management","count":1,"pct":11},{"name":"Mechanical Assembly & CAD","count":1,"pct":11},{"name":"Engineering Hiring — Q3 (2-3 Roles)","count":1,"pct":11},{"name":"Pilot Cohort 1 — 8 Customer Deployments","count":1,"pct":11}],"risk":{"high":9,"medium":27,"low":0,"highItems":[{"title":"Financial model & 3-year projections","due":"2026-08-15"},{"title":"Identify backup sensor supplier","due":"2026-05-10"},{"title":"🚫 Confirm sensor supplier ship date","due":"2026-05-05"},{"title":"🚫 Backend integration with HW API","due":"2026-06-15"},{"title":"🚫 Resolve sensor supplier ETA","due":"2026-05-10"}],"mediumItems":[{"title":"Prospect outreach campaign — 5 qualified leads","due":"2026-09-30"},{"title":"Per-customer feedback sessions (monthly)","due":null},{"title":"Map warm intro paths via network","due":"2026-08-15"},{"title":"Cap table cleanup & legal review","due":"2026-09-01"},{"title":"IP assignment documentation","due":"2026-09-01"}]},"loadBalance":[{"name":"Unassigned","active":9,"p1":36,"total":52}],"projectSummary":[{"id":"fdc19ebf-2281-4a42-a0a2-75f028a9edbb","name":"Supplier & Procurement Management","progress":8,"targetDate":"2026-05-15","startDate":"2026-04-24","lead":"—","status":"In Progress","daysLeft":19,"openIssues":3,"totalIssues":3,"p1Open":3},{"id":"e2d3c681-979f-4b27-9b76-915c7a789570","name":"Mechanical Assembly & CAD","progress":8,"targetDate":"2026-05-25","startDate":"2026-04-24","lead":"—","status":"In Progress","daysLeft":29,"openIssues":3,"totalIssues":3,"p1Open":2},{"id":"1edb1dae-0d1e-4fbd-b8c4-50ba3de47ae0","name":"Sensor Integration","progress":8,"targetDate":"2026-05-30","startDate":"2026-04-24","lead":"—","status":"In Progress","daysLeft":34,"openIssues":3,"totalIssues":3,"p1Open":3},{"id":"c4d18622-68d5-426f-a8bc-9b2cc6017152","name":"Customer Success Playbook","progress":17,"targetDate":"2026-06-15","startDate":"2026-04-24","lead":"—","status":"In Progress","daysLeft":50,"openIssues":3,"totalIssues":3,"p1Open":2},{"id":"91f5abac-cf56-4d35-81d2-f5aacc5475c6","name":"Hardware Testing — Bench & Field","progress":0,"targetDate":"2026-06-15","startDate":null,"lead":"—","status":"Backlog","daysLeft":50,"openIssues":3,"totalIssues":3,"p1Open":3},{"id":"330283db-25d2-4a3f-956b-c71cb1e29e7e","name":"Variety Data Import — v1","progress":0,"targetDate":"2026-06-30","startDate":"2026-04-24","lead":"—","status":"In Progress","daysLeft":65,"openIssues":1,"totalIssues":1,"p1Open":1},{"id":"5c7ca613-4f0e-4e51-9507-0e9064cfdefb","name":"Frontend — Customer App","progress":8,"targetDate":"2026-06-30","startDate":"2026-04-24","lead":"—","status":"In Progress","daysLeft":65,"openIssues":3,"totalIssues":3,"p1Open":2},{"id":"a2c08887-f6e1-4c26-a564-51531faad69a","name":"API Design & Backend Services","progress":13,"targetDate":"2026-06-30","startDate":"2026-04-24","lead":"—","status":"In Progress","daysLeft":65,"openIssues":2,"totalIssues":2,"p1Open":2},{"id":"a23815b5-34ef-4929-9256-be92704038c9","name":"Pilot Cohort 1 — 8 Customer Deployments","progress":13,"targetDate":"2026-07-31","startDate":"2026-04-24","lead":"—","status":"In Progress","daysLeft":96,"openIssues":2,"totalIssues":2,"p1Open":2},{"id":"6dc742cf-eb2a-4d3c-a7b4-2b0e23691729","name":"Social Media Content Process","progress":0,"targetDate":"2026-07-31","startDate":null,"lead":"—","status":"Backlog","daysLeft":96,"openIssues":3,"totalIssues":3,"p1Open":0},{"id":"8fefe3f6-faa8-4a0b-90d1-7803a000a4b9","name":"Pricing & Contract Templates","progress":0,"targetDate":"2026-07-31","startDate":null,"lead":"—","status":"Backlog","daysLeft":96,"openIssues":2,"totalIssues":2,"p1Open":1},{"id":"ed01f4bf-b1ec-43b5-9258-33f75b99d296","name":"Analytics Dashboard — v1","progress":0,"targetDate":"2026-07-31","startDate":null,"lead":"—","status":"Backlog","daysLeft":96,"openIssues":3,"totalIssues":3,"p1Open":0},{"id":"3dab972d-212b-46d2-b56e-a4560d92de80","name":"Sales Deck & Collateral","progress":0,"targetDate":"2026-08-01","startDate":null,"lead":"—","status":"Backlog","daysLeft":97,"openIssues":2,"totalIssues":2,"p1Open":1},{"id":"33897f50-54e5-4a69-9b84-4a13e29ed67c","name":"Engineering Hiring — Q3 (2-3 Roles)","progress":8,"targetDate":"2026-08-31","startDate":"2026-04-24","lead":"—","status":"In Progress","daysLeft":127,"openIssues":3,"totalIssues":3,"p1Open":0},{"id":"19bdab2c-32ae-45a7-99c5-3e68e4ce9d95","name":"Prospect Outreach & Pipeline","progress":0,"targetDate":"2026-09-30","startDate":null,"lead":"—","status":"Backlog","daysLeft":157,"openIssues":3,"totalIssues":3,"p1Open":1},{"id":"dfb0d4e3-28eb-4a38-8558-1be93b1d1ead","name":"Due Diligence Preparation","progress":0,"targetDate":"2026-10-01","startDate":"2026-04-24","lead":"—","status":"In Progress","daysLeft":158,"openIssues":3,"totalIssues":3,"p1Open":3},{"id":"d320f98e-010a-4140-bbfb-e075f0fe7685","name":"Series A — Investment Materials","progress":0,"targetDate":"2026-10-31","startDate":null,"lead":"—","status":"Backlog","daysLeft":188,"openIssues":3,"totalIssues":3,"p1Open":3},{"id":"04a42233-59d8-4077-a85f-9c4881fed952","name":"Investor Targeting & Warm Intros","progress":0,"targetDate":"2026-10-31","startDate":null,"lead":"—","status":"Backlog","daysLeft":188,"openIssues":3,"totalIssues":3,"p1Open":3}]}};
+</script>
+
+<div class="dashboard">
+  <h1>🌿 Moss Robotics — PMO Dashboard</h1>
+  <div class="meta" id="metaLine">Loading…</div>
+
+  <!-- Chips -->
+  <div class="chips" id="chipsRow"></div>
+
+  <!-- Chart 1: Completion -->
+  <div class="card">
+    <div class="card-title">Project Completion Progress (%)</div>
+    <div class="card-subtitle">Planned vs. predicted (velocity-based) vs. actual — derived from Linear issue completions</div>
+    <canvas id="completionChart"></canvas>
+  </div>
+
+  <!-- Charts 2 + 3 -->
+  <div class="two-col">
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">Resource Allocation</div>
+      <div class="card-subtitle">Active (started) issues by project right now</div>
+      <canvas id="resourceChart"></canvas>
+    </div>
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">Risk Distribution</div>
+      <div class="card-subtitle">Open issues by severity — Urgent/overdue = High, unassigned/past-due = Medium</div>
+      <canvas id="riskChart"></canvas>
+    </div>
+  </div>
+  <div style="margin-bottom:20px"></div>
+
+  <!-- Risk items -->
+  <div class="two-col">
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">🔴 High Risk Issues</div>
+      <div class="card-subtitle">Urgent priority or High priority + overdue</div>
+      <ul class="risk-list" id="highRiskList"></ul>
+    </div>
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">🟠 Medium Risk Issues</div>
+      <div class="card-subtitle">High priority + no assignee, or Medium + overdue</div>
+      <ul class="risk-list" id="medRiskList"></ul>
+    </div>
+  </div>
+  <div style="margin-bottom:20px"></div>
+
+  <!-- Projects table -->
+  <div class="card">
+    <div class="card-title">Projects</div>
+    <div class="card-subtitle">All projects with target dates, sorted by deadline</div>
+    <table id="projectsTable"></table>
+  </div>
+
+  <!-- Load balance -->
+  <div class="card">
+    <div class="card-title">Load Balance</div>
+    <div class="card-subtitle">Active and blocked work per team member</div>
+    <table id="loadTable"></table>
+  </div>
+
+  <div class="fetched-at" id="fetchedAt"></div>
+</div>
+
+<script>
+const D = window.__LINEAR_DATA__;
+const TODAY = new Date();
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+if (!D) {
+  document.body.innerHTML = '<div style="padding:40px;font-family:Arial;color:#c62828"><h2>No data found</h2><p>Run <code>npm run update</code> first, then <code>npm run open</code>.</p></div>';
+  throw new Error('No data');
+}
+
+// ── Meta line ────────────────────────────────────────────────────────────────
+document.getElementById('metaLine').textContent =
+  `${D.org}  ·  ${D.issues.length} issues  ·  ${D.projects.length} projects  ·  fetched ${new Date(D.fetchedAt).toLocaleString()}`;
+document.getElementById('fetchedAt').textContent = `Data: ${new Date(D.fetchedAt).toLocaleString()}  ·  Run npm run update to refresh`;
+
+// ── Chips ────────────────────────────────────────────────────────────────────
+const openIssues   = D.issues.filter(i => i.state.type !== 'completed' && i.state.type !== 'cancelled');
+const activeIssues = D.issues.filter(i => i.state.type === 'started');
+const p1Open       = openIssues.filter(i => i.priority <= 2).length;
+const overdue      = openIssues.filter(i => i.dueDate && new Date(i.dueDate) < TODAY).length;
+
+// T-minus: next project by target date
+const nextProject  = D.projects
+  .filter(p => p.targetDate && new Date(p.targetDate) >= TODAY)
+  .sort((a,b) => new Date(a.targetDate) - new Date(b.targetDate))[0];
+const tMinus       = nextProject ? Math.ceil((new Date(nextProject.targetDate) - TODAY) / 86400000) : null;
+
+function chip(label, val, sub, colorClass) {
+  return `<div class="chip">
+    <span class="chip-label">${label}</span>
+    <span class="chip-value ${colorClass}">${val}</span>
+    <span class="chip-sub">${sub}</span>
+  </div>`;
+}
+
+document.getElementById('chipsRow').innerHTML =
+  (tMinus !== null ? chip('T-Minus', tMinus + 'd', nextProject.name.slice(0,22), tMinus < 14 ? 'red' : tMinus < 30 ? 'amber' : 'green') : '') +
+  chip('Open Issues', openIssues.length, 'not completed', 'blue') +
+  chip('In Progress', activeIssues.length, 'started right now', 'blue') +
+  chip('Open P1/P2s', p1Open, 'urgent or high priority', p1Open > 5 ? 'red' : 'amber') +
+  chip('Overdue', overdue, 'past due date', overdue > 0 ? 'red' : 'green') +
+  `<div class="odo-chip">
+    <div class="odo-field">
+      <span class="odo-label">Cash Remaining</span>
+      <input class="odo-input" id="cashInput" value="$2,400,000" />
+    </div>
+    <span class="odo-sep">÷</span>
+    <div class="odo-field">
+      <span class="odo-label">Monthly Burn</span>
+      <input class="odo-input" id="burnInput" value="$185,000" />
+    </div>
+    <span class="odo-sep">=</span>
+    <div class="odo-field">
+      <span class="runway-val" id="runwayVal" style="color:#2e7d32">—</span>
+      <span class="runway-label">mo runway</span>
+    </div>
+  </div>`;
+
+function updateOdo() {
+  const cash = parseFloat(document.getElementById('cashInput').value.replace(/[^0-9.]/g,'')) || 0;
+  const burn = parseFloat(document.getElementById('burnInput').value.replace(/[^0-9.]/g,'')) || 0;
+  const el   = document.getElementById('runwayVal');
+  if (burn > 0) {
+    const mo = (cash / burn).toFixed(1);
+    el.textContent = mo + ' mo';
+    el.style.color = mo < 6 ? '#c62828' : mo < 12 ? '#f57f17' : '#2e7d32';
+  }
+}
+setTimeout(() => {
+  document.getElementById('cashInput').addEventListener('input', updateOdo);
+  document.getElementById('burnInput').addEventListener('input', updateOdo);
+  updateOdo();
+}, 0);
+
+// ── Chart 1: Completion ──────────────────────────────────────────────────────
+const cm = D.metrics.completionByMonth;
+new Chart(document.getElementById('completionChart'), {
+  type: 'line',
+  data: {
+    labels: MONTHS,
+    datasets: [
+      { label: 'Planned',        data: cm.map(m => m.planned),   borderColor: '#8884d8', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 3 },
+      { label: 'Predicted (velocity)', data: cm.map(m => m.predicted), borderColor: '#82ca9d', borderWidth: 2, borderDash: [6,3], fill: false, tension: 0.3, pointRadius: 3 },
+      { label: 'Actual',         data: cm.map(m => m.actual),    borderColor: '#ff7300', borderWidth: 2.5, fill: false, tension: 0.3, pointRadius: 4 },
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { intersect: false, mode: 'index' },
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      y: { beginAtZero: true, max: 100, title: { display: true, text: 'Completion %' } },
+      x: { title: { display: true, text: new Date().getFullYear().toString() } }
+    }
+  }
+});
+
+// ── Chart 2: Resource allocation ─────────────────────────────────────────────
+const ra = D.metrics.resourceAllocation;
+new Chart(document.getElementById('resourceChart'), {
+  type: 'bar',
+  data: {
+    labels: ra.map(r => r.name.length > 18 ? r.name.slice(0,18) + '…' : r.name),
+    datasets: [{
+      label: 'Active Issues',
+      data: ra.map(r => r.count),
+      backgroundColor: ['#8884d8','#82ca9d','#ff7300','#0088fe','#ffc658','#a4de6c'],
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, title: { display: true, text: 'In-Progress Issues' } }
+    }
+  }
+});
+
+// ── Chart 3: Risk ────────────────────────────────────────────────────────────
+new Chart(document.getElementById('riskChart'), {
+  type: 'doughnut',
+  data: {
+    labels: [
+      `High (${D.metrics.risk.high})`,
+      `Medium (${D.metrics.risk.medium})`,
+      `Low (${D.metrics.risk.low})`,
+    ],
+    datasets: [{
+      data: [D.metrics.risk.high, D.metrics.risk.medium, D.metrics.risk.low],
+      backgroundColor: ['rgba(198,40,40,.7)', 'rgba(245,127,23,.7)', 'rgba(56,139,253,.5)'],
+      borderWidth: 2, borderColor: '#fff',
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'bottom' } }
+  }
+});
+
+// ── Risk lists ───────────────────────────────────────────────────────────────
+function renderRiskList(items, elId, cls) {
+  const el = document.getElementById(elId);
+  if (!items.length) { el.innerHTML = '<li style="color:#888;padding:8px 10px;font-size:12px">None right now ✓</li>'; return; }
+  el.innerHTML = items.map(i =>
+    `<li class="${cls}">
+      <span>${i.title}</span>
+      <span class="risk-info">${i.assignee || 'unassigned'} · ${i.due || 'no due date'}</span>
+    </li>`
+  ).join('');
+}
+renderRiskList(D.metrics.risk.highItems,   'highRiskList', 'risk-high');
+renderRiskList(D.metrics.risk.mediumItems, 'medRiskList',  'risk-medium');
+
+// ── Projects table ───────────────────────────────────────────────────────────
+(function() {
+  const ps = D.metrics.projectSummary;
+  const el = document.getElementById('projectsTable');
+  el.innerHTML = `<thead><tr>
+    <th>Project</th><th>Lead</th><th>Status</th><th>Progress</th>
+    <th>Open Issues</th><th>P1/P2 Open</th><th>Target Date</th><th>Days Left</th>
+  </tr></thead>`;
+  const tbody = document.createElement('tbody');
+  ps.forEach(p => {
+    const progColor = p.progress >= 75 ? '#2e7d32' : p.progress >= 40 ? '#f57f17' : '#c62828';
+    const daysColor = !p.daysLeft ? '#888' : p.daysLeft < 14 ? '#c62828' : p.daysLeft < 30 ? '#f57f17' : '#333';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${p.name}</strong></td>
+      <td>${p.lead}</td>
+      <td><span class="status-dot"><span class="dot" style="background:${p.progress >= 75?'#2e7d32':p.progress>=40?'#f57f17':'#1565c0'}"></span>${p.status}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:7px">
+          <div class="prog-bg"><div class="prog-fill" style="width:${p.progress}%;background:${progColor}"></div></div>
+          <span style="font-size:12px;color:${progColor};font-weight:bold">${p.progress}%</span>
+        </div>
+      </td>
+      <td style="text-align:center">${p.openIssues} / ${p.totalIssues}</td>
+      <td style="text-align:center;color:${p.p1Open>0?'#c62828':'#888'};font-weight:bold">${p.p1Open > 0 ? p.p1Open : '–'}</td>
+      <td style="color:#555;font-size:12px">${p.targetDate || '—'}</td>
+      <td style="font-weight:bold;color:${daysColor}">${p.daysLeft != null ? p.daysLeft + 'd' : '—'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  el.appendChild(tbody);
+})();
+
+// ── Load balance ─────────────────────────────────────────────────────────────
+(function() {
+  const lb = D.metrics.loadBalance;
+  const el = document.getElementById('loadTable');
+  el.innerHTML = `<thead><tr>
+    <th>Person</th><th>Total Open</th><th>In Progress</th><th>P1/P2 Open</th><th>Workload</th>
+  </tr></thead>`;
+  const tbody = document.createElement('tbody');
+  const maxActive = Math.max(...lb.map(r => r.active), 1);
+  lb.forEach(row => {
+    const pct       = Math.round((row.active / maxActive) * 100);
+    const capColor  = pct >= 80 ? '#c62828' : pct >= 50 ? '#f57f17' : '#2e7d32';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${row.name}</strong></td>
+      <td style="text-align:center">${row.total}</td>
+      <td style="text-align:center;font-weight:bold;color:${row.active>0?'#1565c0':'#aaa'}">${row.active}</td>
+      <td style="text-align:center;color:${row.p1>0?'#c62828':'#888'};font-weight:bold">${row.p1 || '–'}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:7px">
+          <div class="cap-bg"><div class="cap-fill" style="width:${pct}%;background:${capColor}"></div></div>
+          <span style="font-size:11px;color:${capColor}">${row.active} active</span>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  el.appendChild(tbody);
+})();
+</script>
+</body>
+</html>

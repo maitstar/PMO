@@ -1,0 +1,11 @@
+{
+  "name": "moss-pmo",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "fetch":  "node scripts/fetch-linear.mjs",
+    "inject": "node scripts/inject.mjs",
+    "update": "node scripts/fetch-linear.mjs && node scripts/inject.mjs",
+    "open":   "open dashboard.html"
+  }
+}

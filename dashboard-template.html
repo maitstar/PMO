@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moss Robotics — PMO Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background-color: #f5f5f5;
+  }
+  .dashboard { max-width: 1200px; margin: 0 auto; }
+
+  h1 { color: #333; margin-bottom: 4px; }
+  .meta { color: #888; font-size: 13px; margin-bottom: 20px; }
+
+  /* Chips row */
+  .chips { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+  .chip {
+    background: white; border-radius: 8px; padding: 14px 18px;
+    box-shadow: 0 2px 4px rgba(0,0,0,.1); display: flex; flex-direction: column; min-width: 120px;
+  }
+  .chip-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+  .chip-value { font-size: 24px; font-weight: bold; line-height: 1; }
+  .chip-sub   { font-size: 11px; color: #888; margin-top: 3px; }
+  .green { color: #2e7d32; } .amber { color: #f57f17; } .red { color: #c62828; } .blue { color: #1565c0; }
+
+  /* Odometer */
+  .odo-chip {
+    background: white; border-radius: 8px; padding: 14px 18px;
+    box-shadow: 0 2px 4px rgba(0,0,0,.1); display: flex; align-items: center; gap: 12px;
+  }
+  .odo-field { display: flex; flex-direction: column; }
+  .odo-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .5px; }
+  .odo-input {
+    border: none; outline: none; font-size: 17px; font-weight: bold; color: #333;
+    width: 110px; background: transparent; cursor: text;
+  }
+  .odo-input:focus { color: #1565c0; border-bottom: 1px solid #1565c0; }
+  .odo-sep { font-size: 20px; color: #ddd; }
+  .runway-val { font-size: 24px; font-weight: bold; }
+  .runway-label { font-size: 11px; color: #888; }
+
+  /* Cards */
+  .card {
+    background: white; border-radius: 8px; padding: 20px;
+    margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,.1);
+  }
+  .card-title    { font-size: 18px; font-weight: bold; margin-bottom: 4px; color: #333; }
+  .card-subtitle { font-size: 13px; color: #888; margin-bottom: 16px; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+  @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left; padding: 9px 12px; border-bottom: 2px solid #eee;
+    color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+  }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: #fafafa; }
+
+  /* Badges */
+  .pill {
+    display: inline-block; padding: 2px 9px; border-radius: 12px;
+    font-size: 11px; font-weight: 600; color: white;
+  }
+  .status-dot { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .p1 { color: #c62828; font-weight: bold; }
+  .p2 { color: #f57f17; font-weight: bold; }
+  .p3 { color: #555; }
+
+  /* Progress bar */
+  .prog-bg { width: 80px; height: 7px; background: #eee; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; }
+  .prog-fill { height: 100%; border-radius: 4px; }
+
+  /* Cap bar */
+  .cap-bg  { width: 70px; height: 7px; background: #eee; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; }
+  .cap-fill { height: 100%; border-radius: 4px; }
+
+  /* Risk items */
+  .risk-list { list-style: none; padding: 0; margin: 8px 0 0; }
+  .risk-list li {
+    padding: 7px 10px; margin-bottom: 5px; border-radius: 6px;
+    font-size: 12px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .risk-high   { background: #fce8e8; border-left: 3px solid #c62828; }
+  .risk-medium { background: #fff3e0; border-left: 3px solid #f57f17; }
+  .risk-info   { color: #888; font-size: 11px; }
+
+  .fetched-at { font-size: 11px; color: #aaa; margin-top: 30px; text-align: right; }
+</style>
+</head>
+<body>
+<script>
+// __LINEAR_DATA__
+</script>
+
+<div class="dashboard">
+  <h1>🌿 Moss Robotics — PMO Dashboard</h1>
+  <div class="meta" id="metaLine">Loading…</div>
+
+  <!-- Chips -->
+  <div class="chips" id="chipsRow"></div>
+
+  <!-- Chart 1: Completion -->
+  <div class="card">
+    <div class="card-title">Project Completion Progress (%)</div>
+    <div class="card-subtitle">Planned vs. predicted (velocity-based) vs. actual — derived from Linear issue completions</div>
+    <canvas id="completionChart"></canvas>
+  </div>
+
+  <!-- Charts 2 + 3 -->
+  <div class="two-col">
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">Resource Allocation</div>
+      <div class="card-subtitle">Active (started) issues by project right now</div>
+      <canvas id="resourceChart"></canvas>
+    </div>
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">Risk Distribution</div>
+      <div class="card-subtitle">Open issues by severity — Urgent/overdue = High, unassigned/past-due = Medium</div>
+      <canvas id="riskChart"></canvas>
+    </div>
+  </div>
+  <div style="margin-bottom:20px"></div>
+
+  <!-- Risk items -->
+  <div class="two-col">
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">🔴 High Risk Issues</div>
+      <div class="card-subtitle">Urgent priority or High priority + overdue</div>
+      <ul class="risk-list" id="highRiskList"></ul>
+    </div>
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">🟠 Medium Risk Issues</div>
+      <div class="card-subtitle">High priority + no assignee, or Medium + overdue</div>
+      <ul class="risk-list" id="medRiskList"></ul>
+    </div>
+  </div>
+  <div style="margin-bottom:20px"></div>
+
+  <!-- Projects table -->
+  <div class="card">
+    <div class="card-title">Projects</div>
+    <div class="card-subtitle">All projects with target dates, sorted by deadline</div>
+    <table id="projectsTable"></table>
+  </div>
+
+  <!-- Load balance -->
+  <div class="card">
+    <div class="card-title">Load Balance</div>
+    <div class="card-subtitle">Active and blocked work per team member</div>
+    <table id="loadTable"></table>
+  </div>
+
+  <div class="fetched-at" id="fetchedAt"></div>
+</div>
+
+<script>
+const D = window.__LINEAR_DATA__;
+const TODAY = new Date();
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+if (!D) {
+  document.body.innerHTML = '<div style="padding:40px;font-family:Arial;color:#c62828"><h2>No data found</h2><p>Run <code>npm run update</code> first, then <code>npm run open</code>.</p></div>';
+  throw new Error('No data');
+}
+
+// ── Meta line ────────────────────────────────────────────────────────────────
+document.getElementById('metaLine').textContent =
+  `${D.org}  ·  ${D.issues.length} issues  ·  ${D.projects.length} projects  ·  fetched ${new Date(D.fetchedAt).toLocaleString()}`;
+document.getElementById('fetchedAt').textContent = `Data: ${new Date(D.fetchedAt).toLocaleString()}  ·  Run npm run update to refresh`;
+
+// ── Chips ────────────────────────────────────────────────────────────────────
+const openIssues   = D.issues.filter(i => i.state.type !== 'completed' && i.state.type !== 'cancelled');
+const activeIssues = D.issues.filter(i => i.state.type === 'started');
+const p1Open       = openIssues.filter(i => i.priority <= 2).length;
+const overdue      = openIssues.filter(i => i.dueDate && new Date(i.dueDate) < TODAY).length;
+
+// T-minus: next project by target date
+const nextProject  = D.projects
+  .filter(p => p.targetDate && new Date(p.targetDate) >= TODAY)
+  .sort((a,b) => new Date(a.targetDate) - new Date(b.targetDate))[0];
+const tMinus       = nextProject ? Math.ceil((new Date(nextProject.targetDate) - TODAY) / 86400000) : null;
+
+function chip(label, val, sub, colorClass) {
+  return `<div class="chip">
+    <span class="chip-label">${label}</span>
+    <span class="chip-value ${colorClass}">${val}</span>
+    <span class="chip-sub">${sub}</span>
+  </div>`;
+}
+
+document.getElementById('chipsRow').innerHTML =
+  (tMinus !== null ? chip('T-Minus', tMinus + 'd', nextProject.name.slice(0,22), tMinus < 14 ? 'red' : tMinus < 30 ? 'amber' : 'green') : '') +
+  chip('Open Issues', openIssues.length, 'not completed', 'blue') +
+  chip('In Progress', activeIssues.length, 'started right now', 'blue') +
+  chip('Open P1/P2s', p1Open, 'urgent or high priority', p1Open > 5 ? 'red' : 'amber') +
+  chip('Overdue', overdue, 'past due date', overdue > 0 ? 'red' : 'green') +
+  `<div class="odo-chip">
+    <div class="odo-field">
+      <span class="odo-label">Cash Remaining</span>
+      <input class="odo-input" id="cashInput" value="$2,400,000" />
+    </div>
+    <span class="odo-sep">÷</span>
+    <div class="odo-field">
+      <span class="odo-label">Monthly Burn</span>
+      <input class="odo-input" id="burnInput" value="$185,000" />
+    </div>
+    <span class="odo-sep">=</span>
+    <div class="odo-field">
+      <span class="runway-val" id="runwayVal" style="color:#2e7d32">—</span>
+      <span class="runway-label">mo runway</span>
+    </div>
+  </div>`;
+
+function updateOdo() {
+  const cash = parseFloat(document.getElementById('cashInput').value.replace(/[^0-9.]/g,'')) || 0;
+  const burn = parseFloat(document.getElementById('burnInput').value.replace(/[^0-9.]/g,'')) || 0;
+  const el   = document.getElementById('runwayVal');
+  if (burn > 0) {
+    const mo = (cash / burn).toFixed(1);
+    el.textContent = mo + ' mo';
+    el.style.color = mo < 6 ? '#c62828' : mo < 12 ? '#f57f17' : '#2e7d32';
+  }
+}
+setTimeout(() => {
+  document.getElementById('cashInput').addEventListener('input', updateOdo);
+  document.getElementById('burnInput').addEventListener('input', updateOdo);
+  updateOdo();
+}, 0);
+
+// ── Chart 1: Completion ──────────────────────────────────────────────────────
+const cm = D.metrics.completionByMonth;
+new Chart(document.getElementById('completionChart'), {
+  type: 'line',
+  data: {
+    labels: MONTHS,
+    datasets: [
+      { label: 'Planned',        data: cm.map(m => m.planned),   borderColor: '#8884d8', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 3 },
+      { label: 'Predicted (velocity)', data: cm.map(m => m.predicted), borderColor: '#82ca9d', borderWidth: 2, borderDash: [6,3], fill: false, tension: 0.3, pointRadius: 3 },
+      { label: 'Actual',         data: cm.map(m => m.actual),    borderColor: '#ff7300', borderWidth: 2.5, fill: false, tension: 0.3, pointRadius: 4 },
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { intersect: false, mode: 'index' },
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      y: { beginAtZero: true, max: 100, title: { display: true, text: 'Completion %' } },
+      x: { title: { display: true, text: new Date().getFullYear().toString() } }
+    }
+  }
+});
+
+// ── Chart 2: Resource allocation ─────────────────────────────────────────────
+const ra = D.metrics.resourceAllocation;
+new Chart(document.getElementById('resourceChart'), {
+  type: 'bar',
+  data: {
+    labels: ra.map(r => r.name.length > 18 ? r.name.slice(0,18) + '…' : r.name),
+    datasets: [{
+      label: 'Active Issues',
+      data: ra.map(r => r.count),
+      backgroundColor: ['#8884d8','#82ca9d','#ff7300','#0088fe','#ffc658','#a4de6c'],
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, title: { display: true, text: 'In-Progress Issues' } }
+    }
+  }
+});
+
+// ── Chart 3: Risk ────────────────────────────────────────────────────────────
+new Chart(document.getElementById('riskChart'), {
+  type: 'doughnut',
+  data: {
+    labels: [
+      `High (${D.metrics.risk.high})`,
+      `Medium (${D.metrics.risk.medium})`,
+      `Low (${D.metrics.risk.low})`,
+    ],
+    datasets: [{
+      data: [D.metrics.risk.high, D.metrics.risk.medium, D.metrics.risk.low],
+      backgroundColor: ['rgba(198,40,40,.7)', 'rgba(245,127,23,.7)', 'rgba(56,139,253,.5)'],
+      borderWidth: 2, borderColor: '#fff',
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'bottom' } }
+  }
+});
+
+// ── Risk lists ───────────────────────────────────────────────────────────────
+function renderRiskList(items, elId, cls) {
+  const el = document.getElementById(elId);
+  if (!items.length) { el.innerHTML = '<li style="color:#888;padding:8px 10px;font-size:12px">None right now ✓</li>'; return; }
+  el.innerHTML = items.map(i =>
+    `<li class="${cls}">
+      <span>${i.title}</span>
+      <span class="risk-info">${i.assignee || 'unassigned'} · ${i.due || 'no due date'}</span>
+    </li>`
+  ).join('');
+}
+renderRiskList(D.metrics.risk.highItems,   'highRiskList', 'risk-high');
+renderRiskList(D.metrics.risk.mediumItems, 'medRiskList',  'risk-medium');
+
+// ── Projects table ───────────────────────────────────────────────────────────
+(function() {
+  const ps = D.metrics.projectSummary;
+  const el = document.getElementById('projectsTable');
+  el.innerHTML = `<thead><tr>
+    <th>Project</th><th>Lead</th><th>Status</th><th>Progress</th>
+    <th>Open Issues</th><th>P1/P2 Open</th><th>Target Date</th><th>Days Left</th>
+  </tr></thead>`;
+  const tbody = document.createElement('tbody');
+  ps.forEach(p => {
+    const progColor = p.progress >= 75 ? '#2e7d32' : p.progress >= 40 ? '#f57f17' : '#c62828';
+    const daysColor = !p.daysLeft ? '#888' : p.daysLeft < 14 ? '#c62828' : p.daysLeft < 30 ? '#f57f17' : '#333';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${p.name}</strong></td>
+      <td>${p.lead}</td>
+      <td><span class="status-dot"><span class="dot" style="background:${p.progress >= 75?'#2e7d32':p.progress>=40?'#f57f17':'#1565c0'}"></span>${p.status}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:7px">
+          <div class="prog-bg"><div class="prog-fill" style="width:${p.progress}%;background:${progColor}"></div></div>
+          <span style="font-size:12px;color:${progColor};font-weight:bold">${p.progress}%</span>
+        </div>
+      </td>
+      <td style="text-align:center">${p.openIssues} / ${p.totalIssues}</td>
+      <td style="text-align:center;color:${p.p1Open>0?'#c62828':'#888'};font-weight:bold">${p.p1Open > 0 ? p.p1Open : '–'}</td>
+      <td style="color:#555;font-size:12px">${p.targetDate || '—'}</td>
+      <td style="font-weight:bold;color:${daysColor}">${p.daysLeft != null ? p.daysLeft + 'd' : '—'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  el.appendChild(tbody);
+})();
+
+// ── Load balance ─────────────────────────────────────────────────────────────
+(function() {
+  const lb = D.metrics.loadBalance;
+  const el = document.getElementById('loadTable');
+  el.innerHTML = `<thead><tr>
+    <th>Person</th><th>Total Open</th><th>In Progress</th><th>P1/P2 Open</th><th>Workload</th>
+  </tr></thead>`;
+  const tbody = document.createElement('tbody');
+  const maxActive = Math.max(...lb.map(r => r.active), 1);
+  lb.forEach(row => {
+    const pct       = Math.round((row.active / maxActive) * 100);
+    const capColor  = pct >= 80 ? '#c62828' : pct >= 50 ? '#f57f17' : '#2e7d32';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${row.name}</strong></td>
+      <td style="text-align:center">${row.total}</td>
+      <td style="text-align:center;font-weight:bold;color:${row.active>0?'#1565c0':'#aaa'}">${row.active}</td>
+      <td style="text-align:center;color:${row.p1>0?'#c62828':'#888'};font-weight:bold">${row.p1 || '–'}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:7px">
+          <div class="cap-bg"><div class="cap-fill" style="width:${pct}%;background:${capColor}"></div></div>
+          <span style="font-size:11px;color:${capColor}">${row.active} active</span>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  el.appendChild(tbody);
+})();
+</script>
+</body>
+</html>
