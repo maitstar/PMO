@@ -94,6 +94,28 @@
   .risk-info   { color: #888; font-size: 11px; }
 
   .fetched-at { font-size: 11px; color: #aaa; margin-top: 30px; text-align: right; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; border-bottom: 2px solid #eee; margin-bottom: 20px; }
+  .tab-btn {
+    background: none; border: none; padding: 12px 20px; cursor: pointer;
+    font-size: 14px; font-weight: 600; color: #888; border-bottom: 3px solid transparent;
+    transition: all .2s;
+  }
+  .tab-btn:hover { color: #333; }
+  .tab-btn.active { color: #1565c0; border-bottom-color: #1565c0; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Methodology page */
+  .method-section { margin-bottom: 24px; }
+  .method-title { font-size: 16px; font-weight: bold; margin-bottom: 8px; color: #333; }
+  .method-subtitle { font-size: 13px; color: #888; margin-bottom: 12px; }
+  .code { background: #f5f5f5; border-left: 3px solid #1565c0; padding: 10px 12px; font-family: monospace; font-size: 12px; margin: 8px 0; overflow-x: auto; }
+  .source-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+  .source-table th, .source-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 12px; }
+  .source-table th { background: #f9f9f9; font-weight: 600; color: #333; }
+  .source-table code { background: #f5f5f5; padding: 2px 5px; border-radius: 3px; font-family: monospace; }
 </style>
 </head>
 <body>
@@ -104,6 +126,15 @@
 <div class="dashboard">
   <h1>🌿 Moss Robotics — PMO Dashboard</h1>
   <div class="meta" id="metaLine">Loading…</div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="tab-btn" onclick="switchTab('methodology')">📋 Methodology</button>
+  </div>
+
+  <!-- Dashboard Tab -->
+  <div id="dashboard" class="tab-content active">
 
   <!-- Chips -->
   <div class="chips" id="chipsRow"></div>
@@ -160,6 +191,203 @@
   </div>
 
   <div class="fetched-at" id="fetchedAt"></div>
+  </div><!-- /dashboard tab -->
+
+  <!-- Methodology Tab -->
+  <div id="methodology" class="tab-content">
+    <div class="card">
+      <div class="card-title">📋 Data Dictionary & Methodology</div>
+      <div class="card-subtitle">How each metric is calculated and where the data comes from</div>
+    </div>
+
+    <div class="method-section">
+      <div class="method-title">1️⃣ Completion Progress (%)</div>
+      <div class="method-subtitle">Three lines: Planned vs. Predicted vs. Actual</div>
+      <table class="source-table">
+        <tr>
+          <th>Line</th>
+          <th>Source Variable</th>
+          <th>Calculation</th>
+        </tr>
+        <tr>
+          <td><strong>Planned</strong></td>
+          <td><code>project.startDate</code>, <code>project.targetDate</code></td>
+          <td>Linear interpolation from project start to target date. Assumes 0% on start date → 100% on target date.</td>
+        </tr>
+        <tr>
+          <td><strong>Actual</strong></td>
+          <td><code>issue.completedAt</code> (timestamp)</td>
+          <td>Count issues with <code>completedAt</code> in each month / total issues created up to that month. Only counted for months up to today.</td>
+        </tr>
+        <tr>
+          <td><strong>Predicted</strong></td>
+          <td><code>issue.completedAt</code> (last 30 days)</td>
+          <td>Velocity = (issues completed in last 30 days) / 30 = issues/day. Future months = (current completed) + (velocity × days ahead), capped at 100%.</td>
+        </tr>
+      </table>
+      <div class="code">// From fetch-linear.mjs, deriveMetrics()
+const velocity = recentCompleted / 30;  // issues/day
+const projected = completedSoFar + (velocity * daysAhead);
+predicted = Math.min(100, Math.round((projected / totalIssues) * 100));</div>
+    </div>
+
+    <div class="method-section">
+      <div class="method-title">2️⃣ Resource Allocation (%)</div>
+      <div class="method-subtitle">Which projects consume effort right now</div>
+      <table class="source-table">
+        <tr>
+          <th>Metric</th>
+          <th>Source Variable</th>
+          <th>Calculation</th>
+        </tr>
+        <tr>
+          <td><strong>Active Issues per Project</strong></td>
+          <td><code>issue.state.type === 'started'</code> + <code>issue.project.name</code></td>
+          <td>Filter all issues where state.type = 'started' (in progress). Group by project. Count per project.</td>
+        </tr>
+        <tr>
+          <td><strong>Percentage</strong></td>
+          <td>Count per project</td>
+          <td>Each project's count / total active issues across all projects.</td>
+        </tr>
+      </table>
+      <div class="code">const activeIssues = issues.filter(i => i.state.type === 'started');
+const projectCounts = {};
+activeIssues.forEach(iss => {
+  const key = iss.project?.name || 'Unassigned';
+  projectCounts[key]++;
+});
+const totalActive = activeIssues.length;
+const resourceAllocation = Object.entries(projectCounts)
+  .map(([name, count]) => ({ name, count, pct: (count / totalActive) * 100 }));</div>
+    </div>
+
+    <div class="method-section">
+      <div class="method-title">3️⃣ Risk Distribution</div>
+      <div class="method-subtitle">High / Medium / Low risk issues</div>
+      <table class="source-table">
+        <tr>
+          <th>Risk Level</th>
+          <th>Filter Criteria</th>
+          <th>Source Variables</th>
+        </tr>
+        <tr>
+          <td><strong>High</strong></td>
+          <td>Urgent priority issues OR (High priority + overdue)</td>
+          <td><code>issue.priority <= 1</code> OR (<code>priority === 2</code> AND <code>dueDate < today</code>)</td>
+        </tr>
+        <tr>
+          <td><strong>Medium</strong></td>
+          <td>(High priority + no assignee) OR (Medium priority + overdue)</td>
+          <td>(<code>priority === 2</code> AND <code>!assignee</code>) OR (<code>priority === 3</code> AND <code>dueDate < today</code>)</td>
+        </tr>
+        <tr>
+          <td><strong>Low</strong></td>
+          <td>Upcoming issues (due within 14 days, not started)</td>
+          <td><code>state.type === 'backlog'</code> AND <code>dueDate</code> is 0-14 days away</td>
+        </tr>
+      </table>
+      <div class="code">// Priority mapping: 0=None, 1=Urgent, 2=High, 3=Medium, 4=Low
+const highRisk = openIssues.filter(iss =>
+  iss.priority <= 1 ||
+  (iss.priority === 2 && iss.dueDate && new Date(iss.dueDate) < today)
+);
+const mediumRisk = openIssues.filter(iss =>
+  (iss.priority === 2 && !iss.assignee) ||
+  (iss.priority === 3 && iss.dueDate && new Date(iss.dueDate) < today)
+);</div>
+    </div>
+
+    <div class="method-section">
+      <div class="method-title">4️⃣ Load Balance</div>
+      <div class="method-subtitle">Work per team member</div>
+      <table class="source-table">
+        <tr>
+          <th>Column</th>
+          <th>Source Variable</th>
+          <th>Calculation</th>
+        </tr>
+        <tr>
+          <td><strong>Total Open</strong></td>
+          <td><code>issue.assignee.name</code> + <code>state.type !== 'completed'</code></td>
+          <td>Count all non-completed issues assigned to each person.</td>
+        </tr>
+        <tr>
+          <td><strong>In Progress</strong></td>
+          <td><code>issue.state.type === 'started'</code></td>
+          <td>Count only 'started' (in-progress) issues per person.</td>
+        </tr>
+        <tr>
+          <td><strong>P1/P2 Open</strong></td>
+          <td><code>issue.priority <= 2</code></td>
+          <td>Count open (not completed) issues with priority = Urgent or High.</td>
+        </tr>
+        <tr>
+          <td><strong>Workload %</strong></td>
+          <td>Count in-progress per person</td>
+          <td>Each person's active count / max(active counts) × 100. Shows relative workload.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="method-section">
+      <div class="method-title">5️⃣ Projects Summary Table</div>
+      <div class="method-subtitle">All projects with status and deadline</div>
+      <table class="source-table">
+        <tr>
+          <th>Column</th>
+          <th>Source Variable</th>
+          <th>Notes</th>
+        </tr>
+        <tr>
+          <td><code>Progress %</code></td>
+          <td><code>project.progress</code> (Linear native)</td>
+          <td>Linear calculates this based on issue completion within the project.</td>
+        </tr>
+        <tr>
+          <td><code>Open Issues</code></td>
+          <td><code>issue.project.id</code> + <code>state.type !== 'completed'</code></td>
+          <td>Count issues in this project that are not completed.</td>
+        </tr>
+        <tr>
+          <td><code>P1/P2 Open</code></td>
+          <td><code>issue.priority <= 2</code> + same project</td>
+          <td>Count critical/high priority blockers in this project.</td>
+        </tr>
+        <tr>
+          <td><code>Days Left</code></td>
+          <td><code>project.targetDate</code></td>
+          <td>Ceil((targetDate - today) / 86400000). Negative = overdue.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="method-section">
+      <div class="method-title">📡 Data Source: Linear API</div>
+      <div class="method-subtitle">All data comes from Linear's GraphQL API</div>
+      <div class="code">// fetch-linear.mjs queries:
+ISSUES_QUERY: issues(filter: { state: { type: { nin: ["cancelled"] } } })
+PROJECTS_QUERY: projects(first: 50)
+TEAMS_QUERY: teams(first: 20)</div>
+      <p style="font-size:12px;color:#666;margin:12px 0">
+        <strong>Key fields pulled:</strong> issue.id, title, priority, state.type, assignee, dueDate, completedAt, createdAt, project.id, project.name, project.progress, project.targetDate, project.startDate
+      </p>
+    </div>
+
+    <div class="method-section">
+      <div class="method-title">⚙️ Refresh Cycle</div>
+      <div class="method-subtitle">How to update the data</div>
+      <p style="font-size:13px;color:#333">
+        Data is fetched on-demand, not continuously. To refresh:
+      </p>
+      <div class="code">npm run update
+# This runs: fetch-linear.mjs → inject.mjs → dashboard.html (regenerated)</div>
+      <p style="font-size:12px;color:#666;margin:12px 0">
+        Last refresh: <span id="methodLastFetch" style="font-weight:bold">—</span>
+      </p>
+    </div>
+
+  </div><!-- /methodology tab -->
 </div>
 
 <script>
@@ -172,10 +400,22 @@ if (!D) {
   throw new Error('No data');
 }
 
+// ── Tab switching ────────────────────────────────────────────────────────────
+function switchTab(tabName) {
+  // Hide all tabs
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+  // Show selected tab
+  document.getElementById(tabName).classList.add('active');
+  event.target.classList.add('active');
+}
+
 // ── Meta line ────────────────────────────────────────────────────────────────
 document.getElementById('metaLine').textContent =
   `${D.org}  ·  ${D.issues.length} issues  ·  ${D.projects.length} projects  ·  fetched ${new Date(D.fetchedAt).toLocaleString()}`;
 document.getElementById('fetchedAt').textContent = `Data: ${new Date(D.fetchedAt).toLocaleString()}  ·  Run npm run update to refresh`;
+document.getElementById('methodLastFetch').textContent = new Date(D.fetchedAt).toLocaleString();
 
 // ── Chips ────────────────────────────────────────────────────────────────────
 const openIssues   = D.issues.filter(i => i.state.type !== 'completed' && i.state.type !== 'cancelled');
